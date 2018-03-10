@@ -1,0 +1,38 @@
+[33mcommit f1ffd0ea302a4acf75486b71acc2be02281a4a06[m[33m ([m[1;36mHEAD -> [m[1;32mmaster[m[33m, [m[1;31morigin/master[m[33m)[m
+Merge: 830bc8e 9219125
+Author: Craig Harvey <craigharvei@gmail.com>
+Date:   Sat Mar 10 13:42:26 2018 +1000
+
+    Merge branch 'master' of https://github.com/charvei/platform-man
+    
+    Setting up and testing
+
+[33mcommit 830bc8ef3afca5543b86eda4ea46a8c813bc9325[m
+Author: Craig Harvey <craigharvei@gmail.com>
+Date:   Sat Mar 10 13:39:03 2018 +1000
+
+    setting up
+
+[33mcommit 9219125daac80254507e8629533595cad07be66d[m
+Author: charvei <30401158+charvei@users.noreply.github.com>
+Date:   Sat Mar 10 13:31:39 2018 +1000
+
+    Delete .gitignore
+
+[33mcommit 4a9146263b902b416d5f20ba7d7d2c2a37f03653[m
+Author: charvei <30401158+charvei@users.noreply.github.com>
+Date:   Sat Mar 10 13:31:12 2018 +1000
+
+    Delete Source.cpp
+
+[33mcommit 125300a4cf6981874ff7548db2a8a31ca2f9c3bf[m
+Author: charvei <30401158+charvei@users.noreply.github.com>
+Date:   Mon Mar 5 12:05:14 2018 +1000
+
+    Add files via upload
+
+[33mcommit c3f5ebe4264912765861ecdd635f8068a74fcc3b[m
+Author: charvei <30401158+charvei@users.noreply.github.com>
+Date:   Mon Mar 5 11:56:21 2018 +1000
+
+    Initial commit

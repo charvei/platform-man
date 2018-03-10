@@ -11,6 +11,8 @@
 #include <list>
 #include <cmath>
 #include <queue>
+#include <iostream>
+#include <fstream>
 
 using namespace std;
 
@@ -97,15 +99,19 @@ public:
 	Level* get_current_level() { return &(levels.front()); }
 	map_object add_level_object(string name, char icon, bool solid);
 	std::map<string, map_object>* get_map_objects() { return &level_objects; }
+	void read_level_file(string file);
 };
 
 Level_Manager::Level_Manager() {
 	add_level_object("land", '=', true);
+	add_level_object("land2", '-', true);
 	add_level_object("wall", '|', true);
 	add_level_object("air", ' ', false);
 
-	Level level1(23, 150, get_map_objects());
+	Level level1(23, 500, get_map_objects());
 	add_level(level1);
+
+	read_level_file("level_1.txt");
 }
 
 void Level_Manager::add_level(Level level) {
@@ -119,6 +125,84 @@ map_object Level_Manager::add_level_object(string name, char icon, bool solid) {
 	};
 	this->level_objects.insert(std::pair<string, map_object>(name, temp_obj));
 	return temp_obj;
+}
+
+/*First pass implementation - refactor after 1st go*/
+//USE VECTORS AND ::ALL_OF
+void Level_Manager::read_level_file(string file) {
+	string line;
+	int width = 0;
+	int height = 0;
+	int map_start = 0;
+	bool map_start_flag = false;
+	int line_index = 0;
+	map_object** map;	//declaration
+	//map = new map_object*[height];	//allocate space for height number of char*'s (i.e a column).
+	//for (int i = 0; i < height; i++) {
+	//	map[i] = new map_object[width]; //allocate space for width number of char's (for each row of the column)
+	//}
+	try {
+		ifstream level_file("../levels/" + file, ios::in);
+		if (!level_file.is_open()) {
+			throw 1;
+		}
+		while (getline(level_file, line)) {
+			for (int i = 0; i <= line.length(); i++) {
+				if (line[0] != '$') {
+					break;
+				}
+				else if (i == line.length()) {
+					width = line.length();
+					//map_start_flag == false ? (map_start = line_index) : (height = line_index - map_start);
+					if (!map_start_flag) {
+						map_start = line_index;
+						map_start_flag = true;
+					}
+					else {
+						height = line_index - map_start;
+						map_start_flag = false;
+					}
+				}
+			}
+			printw("%d", line_index);
+			line_index++;
+
+
+			//for (int i = 0; i <= line.length(); i++) {
+			//	if (!map_start_flag) {
+			//		//Reading area outside of map
+			//		if (line[0] != '$') {
+			//			break;
+			//		}
+			//		else if(i == line.length()) {
+			//			//printw("%c", line[0]);
+			//				map_start = line_index;
+			//				map_start_flag = true;
+			//				width = line.length();
+			//				printw("an entire line was $$'s {%d}\n", i);
+			//		}
+			//	}
+			//	else {
+			//		//Reading map itself
+			//		if (line[0] != '$') {
+			//			break;
+			//		}
+			//		else {
+
+			//	}
+			//}
+			//line_index++;
+			////Check to make sure we encountered a second set of $$$'s that is of same size.
+		}
+		printw("{map_start: %d, width: %d, height: %d, line_index: %d", map_start, width, height, line_index);
+	}
+	catch (int e) {
+		printw("failed: %d", e);
+		return;
+	}
+	
+
+	return;
 }
 
 /*A lot of these functions would fit well in an entity manager of sorts*/
@@ -308,15 +392,19 @@ class Screen {
 	int height, width, starty, startx;
 	WINDOW* main_window;
 	WINDOW* create_new_window(int height, int width, int starty, int startx);
-	
+	int cam_x_pos = 0;
+	int player_screen_pos = 0;
 public:
 	Screen(int height, int width);
 	WINDOW* get_window() { return main_window; }
 	void show_player(Player* player);
 	void hide_player(Player* player);
 
+	int* get_cam_x_pos() { return &cam_x_pos; }
+	int* get_player_screen_pos() { return &player_screen_pos; }
+
 	void show_level(Level level);
-	void scroll_level(Level* level, Player* player);
+	void scroll_level(Level* level, Player* player, int* cam_x_pos, int* player_screen_pos);
 
 	int get_height() { return height; }
 	int get_width() { return width; }
@@ -369,41 +457,34 @@ void Screen::show_level(Level level) {
 /*Approach: camera is at a good starting point but will be good to make a bit responsive
 	>e.g. more willing to move to follow player when at max velocity but less willing during
 	small movements (more mario like!)*/
-void Screen::scroll_level(Level* level, Player* player) {
-	/*Determine best starting render point*/
-	int start_x = 0;
+void Screen::scroll_level(Level* level, Player* player, int* cam_x_pos, int* player_screen_pos) {
 	int start_y = 0;
-	
-	if (player->get_position()[1] < ((this->width / 2) + 5)) {
+	*player_screen_pos = player->get_position()[1] - *cam_x_pos;
+
+	if (player->get_position()[1] < ((this->width / 2) - 4)) {
 		/*Player is at start of level*/
-		start_x = 0;
+		//printw("a");
+		*cam_x_pos = 0;
 	}
-	else if (player->get_position()[1] > (level->get_width() - ((this->width) - this->width / 2))) {
+	else if (player->get_position()[1] > (level->get_width() + 4 - ((this->width) - this->width / 2))) {
 		/*Player is at end of level*/
-		start_x = (level->get_width() + 2 - this->width);
+		*cam_x_pos = (level->get_width() - this->width + 2);
+	}
+	else if (*player_screen_pos > ((this->width / 2) + 4)) {
+		//Player is a bit in the right side of screen
+		if ((*player->get_x_velocity() > 0)) {
+			*cam_x_pos = player->get_position()[1] - ((this->width / 2) + 4);
+		}
 	} 
-	else if (player->get_position()[1] > ((this->width / 2) + 4) && (*player->get_x_velocity() > 0)) {
-		/*Player is is in the second half of the screen + 5 and moving right*/
-		//printw("{%ld}", player->get_x_velocity());
-		//refresh();
-		start_x = player->get_position()[1] - ((this->width / 2) + 4);
+	else if (*player_screen_pos < ((this->width / 2) - 4)) {
+		if ((*player->get_x_velocity() < 0)) {
+			*cam_x_pos = player->get_position()[1] - ((this->width / 2) - 4);
+		}
 	}
-	else if (player->get_position()[1] < ((this->width / 2) + 4) && (*player->get_x_velocity() < 0)) {
-		/*Player is is in the first half of the screen + 5 and moving left*/
-		/*
-		-not good:
-			-only checking if its less than the screen... it needs to be less than half screen + where the screen currently is.
-		*/
-		start_x = player->get_position()[1] - ((this->width / 2) + 4);
-	}
-
-
-	/*check if player has moved x units left/right after stopping*/
 	map_object** map = level->get_map();
 	for (int i = 0; i < this->height - 2; i++) {
 		for (int j = 0; j < this->width - 2; j++) {
-			//printw("%d", player->get_position()[1]);
-			mvwaddch(main_window, i + 1, j + 1, map[i][j+start_x].icon);
+			mvwaddch(main_window, i + 1, j + 1, map[i][j+*cam_x_pos].icon);
 		}
 	}
 	wrefresh(main_window);
@@ -473,7 +554,7 @@ void Game_Manager::game_loop() {
 	int input;
 	double frame_wait = 32;
 	queue<int> pressed_keys;
-	
+	level_manager->read_level_file("level_1.txt");
 	while (1) {
 		auto current = std::chrono::system_clock::now();
 		auto current_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(current);
@@ -481,7 +562,6 @@ void Game_Manager::game_loop() {
 		previous_ms = current_ms;
 		lag += elapsed;
 		int i = 0;
-
 
 
 		/*PROCESSING*/
@@ -505,7 +585,7 @@ void Game_Manager::game_loop() {
 
 		/*RENDERING*/
 		
-		screen->scroll_level(level_manager->get_current_level(), player_manager->get_player());
+		screen->scroll_level(level_manager->get_current_level(), player_manager->get_player(), screen->get_cam_x_pos(), screen->get_player_screen_pos());
 		refresh();
 	}
 }
@@ -521,23 +601,6 @@ void Game_Manager::translate_input(int input) {
 		(*player_manager->get_player()).run('E');
 	}
 }
-
-//void Game_Manager::translate_input(int input) {
-//	switch (input) {
-//	case KEY_UP:
-//		(*player_manager->get_player()).jump();
-//		break;
-//	case KEY_DOWN:
-//		//(*player_manager->get_player()).run('S');
-//		break;
-//	case KEY_RIGHT:
-//		(*player_manager->get_player()).run('E');
-//		break;
-//	case KEY_LEFT:
-//		(*player_manager->get_player()).run('W');
-//		break;
-//	}
-//}
 
 /*MOVE FUNCTIONS FROM PLAYER TO PLAYER_MANAGER???*/
 int main() {
