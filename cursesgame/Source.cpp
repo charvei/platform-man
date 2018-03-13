@@ -27,7 +27,13 @@ using namespace std;
 	-lives
 	-enemies
 	-intro logo 'sierra screen'.
+	-music
+	-menus
+	-controls
+	IN PROGRESS
 	-level editor (text file)
+		>need to refactor map system (change from 2d array to vector<vector>) -- DONE
+		>fix bugs with reading + outputting levels
 	*/
 
 struct map_object {
@@ -38,14 +44,16 @@ struct map_object {
 
 
 class Level {
-	map_object** level_map;
-	map_object** construct_map(int height, int width, std::map<string, map_object>* map_objects);
+	//map_object** level_map;
+	vector<vector<map_object>> map;
+	vector<vector<map_object>> construct_map(int height, int width, std::map<string, map_object>* map_objects);
 	int height;
 	int width;
 	std::map<string, map_object>* level_objects;
 public:
 	Level(int height, int width, std::map<string, map_object>* level_objects);
-	map_object** get_map() { return level_map; }
+	Level(vector<vector<map_object>> map, std::map<string, map_object>* level_objects);
+	vector<vector<map_object>> get_map() { return map; }
 	int get_height() { return height; }
 	int get_width() { return width; }
 	void move_map_object(int startx, int starty, int endx, int endy);
@@ -54,64 +62,72 @@ public:
 
 Level::Level(int height, int width, std::map<string, map_object>* level_objects) {
 	this->level_objects = level_objects;
-	this->level_map = construct_map(height, width, level_objects);		//Do i need to have height & width parameters?
+	this->map = construct_map(height, width, level_objects);
 	this->height = height;
 	this->width = width;
 }
 
-map_object** Level::construct_map(int height, int width, std::map<string, map_object>* level_objects) {
-	map_object** map;	//declaration
-	map = new map_object*[height];	//allocate space for height number of char*'s (i.e a column).
+Level::Level(vector<vector<map_object>> map, std::map<string, map_object>* level_objects) {
+	this->map = map;
+	this->level_objects = level_objects;
+	this->height = map.size();
+	this->width = map.at(0).size();
+}
+
+vector<vector<map_object>> Level::construct_map(int height, int width, std::map<string, map_object>* level_objects) {
+	vector<vector<map_object>> map;
 	for (int i = 0; i < height; i++) {
-		map[i] = new map_object[width]; //allocate space for width number of char's (for each row of the column)
-	}
-	for (int i = 0; i < height; i++) {
+		vector<map_object> temp_row;
 		for (int j = 0; j < width; j++) {
 			if (i == (height - 1)) {
-				map[i][j] = level_objects->find("land")->second;
+				temp_row.push_back(level_objects->find("land")->second);
 			}
 			else if ((j % 42 < 4) && (i > height - 6)) {
-				map[i][j] = level_objects->find("wall")->second;
+				temp_row.push_back(level_objects->find("wall")->second);
 			}
 			else {
-				map[i][j] = level_objects->find("air")->second;
+				temp_row.push_back(level_objects->find("air")->second);
 			}
 		}
+		map.push_back(temp_row);
 	}
 	return map;
 }
 
 void Level::add_map_object(map_object object, int xpos, int ypos) {
-	level_map[xpos][ypos] = object;
+	map.at(xpos).at(ypos) = object;
 }
 
 void Level::move_map_object(int startx, int starty, int endx, int endy) {
-	level_map[endx][endy] = level_map[startx][starty];
-	level_map[startx][starty] = level_objects->find("air")->second;
+	map.at(endx).at(endy) = map.at(startx).at(starty);
+	map.at(startx).at(starty) = level_objects->find("air")->second;
 }
 
 class Level_Manager {
 	list<Level> levels;
+	int screen_height;
 	std::map<string, map_object> level_objects;
 public:
-	Level_Manager();
+	Level_Manager(int screen_height);
 	void add_level(Level level);
 	Level* get_current_level() { return &(levels.front()); }
 	map_object add_level_object(string name, char icon, bool solid);
 	std::map<string, map_object>* get_map_objects() { return &level_objects; }
 	void read_level_file(string file);
+	vector<vector<map_object>> read_level_file2(string file, int screen_height);
 };
 
-Level_Manager::Level_Manager() {
+Level_Manager::Level_Manager(int screen_height) {
+	this->screen_height = screen_height;
 	add_level_object("land", '=', true);
 	add_level_object("land2", '-', true);
 	add_level_object("wall", '|', true);
 	add_level_object("air", ' ', false);
 
-	Level level1(23, 500, get_map_objects());
-	add_level(level1);
+	//Level level1(23, 500, get_map_objects());
 
-	read_level_file("level_1.txt");
+	Level level1(read_level_file2("level_1.txt", screen_height), get_map_objects());
+	add_level(level1);
 }
 
 void Level_Manager::add_level(Level level) {
@@ -125,6 +141,77 @@ map_object Level_Manager::add_level_object(string name, char icon, bool solid) {
 	};
 	this->level_objects.insert(std::pair<string, map_object>(name, temp_obj));
 	return temp_obj;
+}
+
+vector<vector<map_object>> Level_Manager::read_level_file2(string file, int screen_height) {
+	vector<vector<map_object>> map;
+	std::map<string, map_object> *level_objects = (get_map_objects());
+	std::map<string, map_object>::iterator it;
+	//std::map<string, map_object> level_objects = *(get_map_objects());
+	string line;
+	bool map_start_flag = false;
+	int width;
+	try {
+		ifstream level_file("../levels/" + file, ios::in);
+		if (!level_file.is_open()) {
+			throw 1;
+		}
+		while (getline(level_file, line)) {
+			//cout << line + '\n';
+			if (!map_start_flag && (line.length() > 0)) {
+				//Check for things
+				if (line.at(0) == '$') {
+					map_start_flag = true;
+					width = line.length();
+				}
+			}
+			else {
+				//Read map
+				vector<map_object> temp_vector;
+				if ((line.length() > 0) && line.at(0) == '$') {
+					map_start_flag = false;
+					return map;
+				}
+				else if (line.length() > 0) {
+					for (int i = 0; i < line.length(); i++) {
+						for (it = level_objects->begin(); it != level_objects->end(); it++) {
+							if (it->second.icon == line.at(i)) {
+								temp_vector.push_back(it->second);
+							}
+						}
+					}
+					if (line.length() < width) {
+						for (int i = 0; i < width - line.length(); i++) {
+							temp_vector.push_back(level_objects->find("air")->second);
+						}
+					}
+				}
+				else {
+					for (int i = 0; i < width; i++) {
+						temp_vector.push_back(level_objects->find("air")->second);
+					}
+				}
+				map.push_back(temp_vector);
+			}
+		}
+		//Map should be populated now - check to see if smaller than screen, if so add some "air" at top of map
+		if (map.size() < screen_height) {
+			for (int i = 0; i < (screen_height - map.size()); i++) {
+				vector<map_object> temp_vector;
+				for (int j = 0; j < width; j++) {
+					temp_vector.push_back(level_objects->find("air")->second);
+				}
+				map.insert(map.begin(), temp_vector);
+				//map.push_back(temp_vector);
+			}
+		}
+	}
+	catch (int err) {
+		printw("ERROR READING FILE");
+		return map;
+	}
+	return map;
+	//REMEMBER TO CLOSE LEVEL FILE
 }
 
 /*First pass implementation - refactor after 1st go*/
@@ -166,33 +253,6 @@ void Level_Manager::read_level_file(string file) {
 			}
 			printw("%d", line_index);
 			line_index++;
-
-
-			//for (int i = 0; i <= line.length(); i++) {
-			//	if (!map_start_flag) {
-			//		//Reading area outside of map
-			//		if (line[0] != '$') {
-			//			break;
-			//		}
-			//		else if(i == line.length()) {
-			//			//printw("%c", line[0]);
-			//				map_start = line_index;
-			//				map_start_flag = true;
-			//				width = line.length();
-			//				printw("an entire line was $$'s {%d}\n", i);
-			//		}
-			//	}
-			//	else {
-			//		//Reading map itself
-			//		if (line[0] != '$') {
-			//			break;
-			//		}
-			//		else {
-
-			//	}
-			//}
-			//line_index++;
-			////Check to make sure we encountered a second set of $$$'s that is of same size.
 		}
 		printw("{map_start: %d, width: %d, height: %d, line_index: %d", map_start, width, height, line_index);
 	}
@@ -200,8 +260,6 @@ void Level_Manager::read_level_file(string file) {
 		printw("failed: %d", e);
 		return;
 	}
-	
-
 	return;
 }
 
@@ -317,7 +375,7 @@ void Player::gravity(double gravity_constant) {
 	this->y_velocity *= gravity_constant;
 }
 
-/*There is some weird ass shit going on with x, y names - need to make sure x is not called y etc.
+/*There is some weird stuff going on with x, y names - need to make sure x is not called y etc.
 come up with some conventions... for now its working*/
 bool Player::valid_move(int ypos, int xpos) {
 	Level* level = this->level_manager->get_current_level();
@@ -325,7 +383,7 @@ bool Player::valid_move(int ypos, int xpos) {
 		return false;
 	}
 	else {
-		return level->get_map()[ypos][xpos].solid == true ? false : true;
+		return level->get_map().at(ypos).at(xpos).solid == true ? false : true;
 		//refresh();
 	}
 	return false;
@@ -444,11 +502,13 @@ void Screen::hide_player(Player* player) {
 }
 
 void Screen::show_level(Level level) {
-	map_object** map = level.get_map();
-	for (int i = 0; i < this->height-2; i++) {
+	//map_object** map = level.get_map();
+	vector<vector<map_object>> map = level.get_map();
+
+	for (int i = 0; i < map.size(); i++) {
 		for (int j = 0; j < this->width-2; j++) {
-			//printw("{%d=screen, %d=level}", this->height, level.get_height());
-			mvwaddch(main_window, i+1, j+1, map[i][j].icon);
+			//printw("{%d=screen, %d=level}", this->height, map.size());
+			mvwaddch(main_window, i+1, j+1, map.at(i).at(j).icon);
 		}
 	}
 	wrefresh(main_window);
@@ -481,10 +541,11 @@ void Screen::scroll_level(Level* level, Player* player, int* cam_x_pos, int* pla
 			*cam_x_pos = player->get_position()[1] - ((this->width / 2) - 4);
 		}
 	}
-	map_object** map = level->get_map();
-	for (int i = 0; i < this->height - 2; i++) {
+	//map_object** map = level->get_map();
+	vector<vector<map_object>> map = level->get_map();
+	for (int i = 0; i < map.size(); i++) {
 		for (int j = 0; j < this->width - 2; j++) {
-			mvwaddch(main_window, i + 1, j + 1, map[i][j+*cam_x_pos].icon);
+			mvwaddch(main_window, i + 1, j + 1, map.at(i).at(j+*cam_x_pos).icon);
 		}
 	}
 	wrefresh(main_window);
@@ -546,7 +607,7 @@ Game_Manager::Game_Manager(Screen* screen, Player_Manager* player_manager, Level
 
 /*Simple ticking system; perhaps will 'upgrade' later*/
 void Game_Manager::game_loop() {
-	screen->show_level(*(level_manager->get_current_level()));
+	//screen->show_level(*(level_manager->get_current_level()));
 	auto previous = std::chrono::system_clock::now();
 	auto previous_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(previous);
 	double elapsed;
@@ -554,7 +615,6 @@ void Game_Manager::game_loop() {
 	int input;
 	double frame_wait = 32;
 	queue<int> pressed_keys;
-	level_manager->read_level_file("level_1.txt");
 	while (1) {
 		auto current = std::chrono::system_clock::now();
 		auto current_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(current);
@@ -562,7 +622,6 @@ void Game_Manager::game_loop() {
 		previous_ms = current_ms;
 		lag += elapsed;
 		int i = 0;
-
 
 		/*PROCESSING*/
 		while ((input = getch()) != ERR) {
@@ -605,9 +664,11 @@ void Game_Manager::translate_input(int input) {
 /*MOVE FUNCTIONS FROM PLAYER TO PLAYER_MANAGER???*/
 int main() {
 	int player1_pos[2] = { 9, 1 };
-	Level_Manager level_manager = Level_Manager();
+	int screen_height = 25;
+	int screen_width = 85;
+	Level_Manager level_manager = Level_Manager(screen_height);
 	Player player1 = Player(player1_pos, 'O', &level_manager);
-	Screen screen = Screen(25, 85);
+	Screen screen = Screen(screen_height, screen_width);
 	Player_Manager player_manager = Player_Manager(&player1);
 	Map_Object_Manager map_object_manager = Map_Object_Manager();
 	Game_Manager game_manager = Game_Manager(&screen, &player_manager, &level_manager, &map_object_manager);
