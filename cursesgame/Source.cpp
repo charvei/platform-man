@@ -41,7 +41,6 @@ struct map_object {
 	bool solid;
 	//bool harmful_direction[4];	//N, S, E, W
 	vector<bool> harmful_dir;
-	//bool harmful_n, harmful_s, harmful_e, harmful_w;
 };
 
 
@@ -115,7 +114,7 @@ public:
 	void add_level(Level level);
 	Level* get_current_level() { return &(levels.front()); }
 	map_object add_level_object(string name, char icon, bool solid);
-	map_object add_level_object(string name, char icon, bool solid, bool harmful_n, bool harmful_s, bool harmful_e, bool harmful_w);
+	map_object add_level_object(string name, char icon, bool solid, bool N_harm, bool S_harm, bool E_harm, bool W_harm);
 	std::map<string, map_object>* get_map_objects() { return &map_objects; }
 	vector<vector<map_object*>> read_level_file(string file, int screen_height);
 };
@@ -140,22 +139,23 @@ void Level_Manager::add_level(Level level) {
 }
 
 map_object Level_Manager::add_level_object(string name, char icon, bool solid) {
+	vector<bool> no_harms = { false, false, false, false };
 	map_object temp_obj = {
 		icon,
 		solid,
+		no_harms,
 	};
 	this->map_objects.insert(std::pair<string, map_object>(name, temp_obj));
 	return temp_obj;
 }
 
-map_object Level_Manager::add_level_object(string name, char icon, bool solid, bool harmful_n, bool harmful_s, bool harmful_e, bool harmful_w) {
+map_object Level_Manager::add_level_object(string name, char icon, bool solid, bool N_harm, 
+		bool S_harm, bool E_harm, bool W_harm) {
+	vector<bool> harms = { N_harm, S_harm, E_harm, W_harm };
 	map_object temp_obj = {
 		icon,
 		solid,
-		//harmful_n,
-		//harmful_s,
-		//harmful_e,
-		//harmful_w,
+		harms,
 	};
 	this->map_objects.insert(std::pair<string, map_object>(name, temp_obj));
 	return temp_obj;
@@ -231,6 +231,278 @@ vector<vector<map_object*>> Level_Manager::read_level_file(string file, int scre
 	//REMEMBER TO CLOSE LEVEL FILE
 }
 
+class Entity {
+	Level_Manager* level_manager;
+	char icon;
+	int* position;
+	double x_velocity;
+	double x_move_progress;
+	double y_velocity;
+	double y_move_progress;
+public:
+	Entity(int position[2], char icon, Level_Manager* level_manager);
+
+	int* get_position() { return position; }
+	void set_position(int xpos, int ypos) { this->position[0] = xpos; this->position[1] = ypos; }
+	char get_icon() { return icon; }
+
+	void move_player();
+	void move_player_map(char direction, int steps);
+
+	void run(char direction, double to_velocity);
+	void jump();
+
+	bool valid_move(int xpos, int ypos);
+	bool valid_move(int y_dest, int x_dest, int x_diff, int y_diff);
+
+	void friction(double friction_constant);
+	void gravity(double gravity_constant);
+
+	void change_x_velocity(char direction, double to_velocity);
+	void change_y_velocity(char direction, double to_velocity);
+	void change_move_progress();
+
+	double* get_x_velocity() { return &x_velocity; }
+};
+
+Entity::Entity(int position[2], char icon, Level_Manager* level_manager) {
+	this->position = position;
+	this->icon = icon;
+	this->level_manager = level_manager;
+
+	map_object player = level_manager->add_level_object("player", icon, true);
+	level_manager->get_current_level()->add_map_object(&player, position[0], position[1]);
+
+	x_velocity = 0;
+	y_velocity = 0;
+}
+
+void Entity::run(char direction, double to_velocity = 1) {
+	change_x_velocity(direction, 0.25);
+}
+
+void Entity::jump() {
+	//printw("{%c}", level_manager->get_current_level()->get_map()[position[0]+1][position[1]].icon);
+	refresh();
+	if (!(valid_move(position[0] + 1, position[1])) && (y_velocity < 1)) {
+		//standing on something solid
+		change_y_velocity('N', 2);
+	}
+	//change_y_velocity('N', 2);
+}
+
+void Entity::change_x_velocity(char direction, double to_velocity) {
+	if (direction == 'E') {
+		this->x_velocity += to_velocity;
+		if (this->x_velocity > 1.5) {
+			this->x_velocity = 1.5;
+		}
+	}
+	else if (direction == 'W') {
+		this->x_velocity -= to_velocity;
+		if (this->x_velocity < -1.5) {
+			this->x_velocity = -1.5;
+		}
+	}
+}
+
+void Entity::change_y_velocity(char direction, double to_velocity) {
+	if (direction == 'N') {
+		this->y_velocity += to_velocity;
+		if (this->y_velocity > 1.5) {
+			this->y_velocity = 1.5;
+		}
+	}
+	else if (direction == 'S') {
+		this->y_velocity -= to_velocity;
+		if (this->y_velocity < -1.5) {
+			this->y_velocity = -1.5;
+		}
+	}
+}
+
+void Entity::friction(double friction_constant) {
+	if (!(valid_move(position[0] + 1, position[1]))) {
+		this->x_velocity *= friction_constant;
+	}
+	else {
+		//Different level of friction when in the air
+		this->x_velocity *= (friction_constant + ((1 - friction_constant) / 1.5));
+	}
+}
+
+/*whenever move progress clocks over an integer*/
+void Entity::change_move_progress() {
+	this->x_move_progress += x_velocity;
+	this->y_move_progress += y_velocity;
+}
+
+
+void Entity::gravity(double gravity_constant) {
+	if (valid_move(position[0] - 1, position[1])) {	//don't like this check here
+													//there is a non-solid object below player
+		change_y_velocity('S', 0.06);
+	}
+	else {
+		this->y_velocity = 0;
+	}
+	this->y_velocity *= gravity_constant;
+}
+
+/*There is some weird stuff going on with x, y names - need to make sure x is not called y etc.
+come up with some conventions... for now its working*/
+bool Entity::valid_move(int ypos, int xpos) {
+	Level* level = this->level_manager->get_current_level();
+	vector<vector<map_object*>> map = *(level->get_map());
+	if ((xpos > level->get_width() - 1) || (xpos < 0) || (ypos > level->get_height() - 1) || (ypos < 0)) {
+		return false;
+	}
+	else {
+		return (*map.at(ypos).at(xpos)).solid == true ? false : true;
+		//refresh();
+	}
+	return false;
+}
+
+bool Entity::valid_move(int y_dest, int x_dest, int x_diff, int y_diff) {
+	Level* level = this->level_manager->get_current_level();
+	vector<vector<map_object*>> map = *(level->get_map());
+	for (int i = 0; i <= x_diff; i++) {
+		for (int j = 0; j <= y_diff; j++) {
+			if ((x_dest + i > level->get_width() - 1) || (x_dest + i < 0) || (y_dest + j > level->get_height() - 1) || (y_dest + j < 0)) {
+				return false;
+			}
+			else {
+				if ((*map.at(y_dest + j).at(x_dest + i)).solid == true) {
+					return false;
+				}
+				//return level->get_map().at(y_dest+j).at(x_dest+i).solid == true ? false : true;
+			}
+		}
+	}
+	return true;
+}
+
+void Entity::move_player_map(char direction, int steps) {
+	int valid_at = 0;
+	switch (direction) {
+	case 'N':
+		for (int i = 1; i <= steps; i++) {
+			if (!valid_move(position[0] - i, position[1])) {
+				break;
+			}
+			else {
+				valid_at = i;
+			}
+		}
+		if (valid_at) {
+			level_manager->get_current_level()->move_map_object(position[0], position[1], position[0] - valid_at, position[1]);
+			this->set_position(position[0] - valid_at, position[1]);
+		}
+		break;
+	case 'S':
+		for (int i = 1; i <= steps; i++) {
+			if (!valid_move(position[0] + i, position[1])) {
+				break;
+			}
+			else {
+				valid_at = i;
+			}
+		}
+		if (valid_at) {
+			level_manager->get_current_level()->move_map_object(position[0], position[1], position[0] + valid_at, position[1]);
+			this->set_position(position[0] + valid_at, position[1]);
+		}
+		break;
+	case 'E':
+		for (int i = 1; i <= steps; i++) {
+			if (!(valid_move(position[0], position[1] + i))) {
+				break;
+			}
+			else {
+				valid_at = i;
+			}
+		}
+		if (valid_at) {
+			level_manager->get_current_level()->move_map_object(position[0], position[1], position[0], position[1] + valid_at);
+			this->set_position(position[0], position[1] + valid_at);
+		}
+		else {
+			//Hit a solid object when trying to go EAST -> set velocity and move_progress to 0
+			this->x_velocity = 0;
+			this->x_move_progress = 0;
+		}
+		break;
+	case 'W':
+		for (int i = 1; i <= steps; i++) {
+			if (!(valid_move(position[0], position[1] - i))) {
+				break;
+			}
+			else {
+				valid_at = i;
+			}
+		}
+		if (valid_at) {
+			level_manager->get_current_level()->move_map_object(position[0], position[1], position[0], position[1] - valid_at);
+			this->set_position(position[0], position[1] - valid_at);
+		}
+		else {
+			//Hit a solid object when trying to go EAST -> set velocity and move_progress to 0
+			this->x_velocity = 0;
+			this->x_move_progress = 0;
+		}
+		break;
+	}
+}
+
+void Entity::move_player() {
+	if (x_move_progress > 1) {
+		move_player_map('E', (std::abs((int)x_move_progress)));
+		this->x_move_progress -= (int)x_move_progress;
+	}
+	else if (x_move_progress < -1) {
+		move_player_map('W', (std::abs((int)x_move_progress)));
+		this->x_move_progress -= (int)x_move_progress;
+	}
+	if (y_move_progress > 1) {
+		move_player_map('N', (std::abs((int)y_move_progress)));
+		this->y_move_progress -= (int)y_move_progress;
+	}
+	else if (y_move_progress < -1) {
+		move_player_map('S', (std::abs((int)y_move_progress)));
+		this->y_move_progress -= (int)y_move_progress;
+	}
+
+}
+
+class Entity_Manager {
+	Level_Manager* level_manager;
+	vector<Entity> entity_list;
+
+public:
+	Entity_Manager(Level_Manager* level_manager);
+
+	vector<Entity>* get_entity_list();
+	void add_entity(Entity entity);
+
+};
+
+Entity_Manager::Entity_Manager(Level_Manager* level_manager) {
+	this->level_manager = level_manager;
+	int temp_pos[] = {5, 5};
+	Entity test_thing(temp_pos, 'O', level_manager);
+}
+
+vector<Entity>* Entity_Manager::get_entity_list() {
+	return &entity_list;
+}
+
+void Entity_Manager::add_entity(Entity entity) {
+	entity_list.push_back(entity);
+	return;
+}
+
+
 /*A lot of these functions would fit well in an entity manager of sorts*/
 class Player {
 	char icon;
@@ -245,18 +517,24 @@ public:
 	Player(int position[2], char icon, Level_Manager* level_manager);
 	int* get_position() { return position; }
 	void set_position(int xpos, int ypos) { this->position[0] = xpos; this->position[1] = ypos; }
-	void move_player();
 	char get_icon() { return icon; }
+	
+	void move_player();
+	void move_player_map(char direction, int steps);
+
 	bool valid_move(int xpos, int ypos);
 	bool valid_move(int y_dest, int x_dest, int x_diff, int y_diff);
+	
 	void run(char direction, double to_velocity);
 	void jump();
+
 	void friction(double friction_constant);
+	void gravity(double gravity_constant);
+
 	void change_x_velocity(char direction, double to_velocity);
 	void change_y_velocity(char direction, double to_velocity);
 	void change_move_progress();
-	void move_player_map(char direction, int steps);
-	void gravity(double gravity_constant);
+	
 	double* get_x_velocity() { return &x_velocity; }
 };
 
@@ -670,6 +948,7 @@ int main() {
 	int screen_height = 25;
 	int screen_width = 85;
 	Level_Manager level_manager = Level_Manager(screen_height);
+	Entity_Manager entity_manager = Entity_Manager(&level_manager);
 	Player player1 = Player(player1_pos, 'O', &level_manager);
 	Screen screen = Screen(screen_height, screen_width);
 	Player_Manager player_manager = Player_Manager(&player1);
