@@ -28,7 +28,7 @@ using namespace std;
 	-intro logo 'sierra screen'.
 	-music
 	-menus
-	-controls feel improvements
+	-control feel improvements
 	IN PROGRESS
 	-level editor (text file)
 		>fix bugs with reading + outputting levels
@@ -37,13 +37,12 @@ using namespace std;
 	*/
 
 struct map_object {
+	string name;
 	char icon;
 	bool solid;
 	//bool harmful_direction[4];	//N, S, E, W
 	vector<bool> harmful_dir;
 };
-
-
 
 class Level {
 	//map_object** level_map;
@@ -101,7 +100,11 @@ void Level::add_map_object(map_object* object, int xpos, int ypos) {
 }
 
 void Level::move_map_object(int startx, int starty, int endx, int endy) {
+	//This is the way to do it but currently if startx and starty is an entity then it causes an error.
+	//need to think of what is going on; perhaps entity doesn't exist in level_object list when it is called.. or ever?
+	//map_object* prev_obj = &(level_objects->find(map.at(startx).at(starty)->name)->second);
 	map.at(endx).at(endy) = map.at(startx).at(starty);
+	//map.at(startx).at(starty) = prev_obj;	//uncomment with bug fix.
 	map.at(startx).at(starty) = &(level_objects->find("air")->second);
 }
 
@@ -141,6 +144,7 @@ void Level_Manager::add_level(Level level) {
 map_object Level_Manager::add_level_object(string name, char icon, bool solid) {
 	vector<bool> no_harms = { false, false, false, false };
 	map_object temp_obj = {
+		name,
 		icon,
 		solid,
 		no_harms,
@@ -153,6 +157,7 @@ map_object Level_Manager::add_level_object(string name, char icon, bool solid, b
 		bool S_harm, bool E_harm, bool W_harm) {
 	vector<bool> harms = { N_harm, S_harm, E_harm, W_harm };
 	map_object temp_obj = {
+		name,
 		icon,
 		solid,
 		harms,
@@ -364,6 +369,8 @@ bool Entity::valid_move(int ypos, int xpos) {
 		return false;
 	}
 	else {
+		//printw("%d", (*map.at(21).at(5)).solid);
+
 		return (*map.at(ypos).at(xpos)).solid == true ? false : true;
 		//refresh();
 	}
@@ -430,6 +437,8 @@ void Entity::move_entity_map(char direction, int steps) {
 			}
 		}
 		if (valid_at) {
+
+			printw("valid at: %d %d", x_pos, y_pos + valid_at);
 			level_manager->get_current_level()->move_map_object(x_pos, y_pos, x_pos, y_pos + valid_at);
 			this->set_position(x_pos, y_pos + valid_at);
 		}
@@ -489,6 +498,16 @@ void Entity::tick_action() {
 
 }
 
+class Player2 : public Entity {
+	//Entity(int x_pos, int y_pos, char icon, Level_Manager* &level_manager);
+public:
+	Player2(int x_pos, int y_pos, char icon, Level_Manager* level_manager);
+};
+
+Player2::Player2(int x_pos, int y_pos, char icon, Level_Manager* level_manager) : Entity(x_pos, y_pos, icon, level_manager) {
+
+}
+
 class Entity_Manager {
 	Level_Manager* level_manager;
 	vector<Entity> entity_list;
@@ -530,252 +549,6 @@ void Entity_Manager::tick_all_entities() {
 	//entity_list.at(0).tick_action();
 }
 
-/*A lot of these functions would fit well in an entity manager of sorts*/
-class Player {
-	char icon;
-	int* position;
-	Level_Manager* level_manager;
-	//velocity player_velocity;
-	double x_velocity;
-	double x_move_progress;
-	double y_velocity;
-	double y_move_progress;
-public:
-	Player(int position[2], char icon, Level_Manager* level_manager);
-	int* get_position() { return position; }
-	void set_position(int xpos, int ypos) { this->position[0] = xpos; this->position[1] = ypos; }
-	char get_icon() { return icon; }
-	
-	void move_player();
-	void move_player_map(char direction, int steps);
-
-	bool valid_move(int xpos, int ypos);
-	bool valid_move(int y_dest, int x_dest, int x_diff, int y_diff);
-	
-	void run(char direction, double to_velocity);
-	void jump();
-
-	void friction(double friction_constant);
-	void gravity(double gravity_constant);
-
-	void change_x_velocity(char direction, double to_velocity);
-	void change_y_velocity(char direction, double to_velocity);
-	void change_move_progress();
-	
-	double* get_x_velocity() { return &x_velocity; }
-};
-
-Player::Player(int position[2], char icon, Level_Manager* level_manager) {
-	this->position = position;
-	this->icon = icon;
-	this->level_manager = level_manager;
-
-	map_object player = level_manager->add_level_object("player", icon, true);
-	level_manager->get_current_level()->add_map_object(&player, position[0], position[1]);
-
-	x_velocity = 0;
-	y_velocity = 0;
-}
-
-void Player::run(char direction, double to_velocity = 1) {
-	change_x_velocity(direction, 0.25);
-}
-
-void Player::jump() {
-	//printw("{%c}", level_manager->get_current_level()->get_map()[position[0]+1][position[1]].icon);
-	refresh();
-	if (!(valid_move(position[0]+1, position[1])) && (y_velocity < 1)) {
-		//standing on something solid
-		change_y_velocity('N', 2);
-	}
-	//change_y_velocity('N', 2);
-}
-
-void Player::change_x_velocity(char direction, double to_velocity) {
-	if (direction == 'E') {
-		this->x_velocity += to_velocity;
-		if (this->x_velocity > 1.5) {
-			this->x_velocity = 1.5;
-		}
-	}
-	else if (direction == 'W') {
-		this->x_velocity -= to_velocity;
-		if (this->x_velocity < -1.5) {
-			this->x_velocity = -1.5;
-		}
-	}
-}
-
-void Player::change_y_velocity(char direction, double to_velocity) {
-	if (direction == 'N') {
-		this->y_velocity += to_velocity;
-		if (this->y_velocity > 1.5) {
-			this->y_velocity = 1.5;
-		}
-	}
-	else if (direction == 'S') {
-		this->y_velocity -= to_velocity;
-		if (this->y_velocity < -1.5) {
-			this->y_velocity = -1.5;
-		}
-	}
-}
-
-void Player::friction(double friction_constant) {
-	if (!(valid_move(position[0] + 1, position[1]))) {
-		this->x_velocity *= friction_constant;
-	}
-	else {
-		//Different level of friction when in the air
-		this->x_velocity *= (friction_constant+((1 - friction_constant)/1.5));
-	}
-}
-
-/*whenever move progress clocks over an integer*/
-void Player::change_move_progress() {
-	this->x_move_progress += x_velocity;
-	this->y_move_progress += y_velocity;
-}
-
-
-void Player::gravity(double gravity_constant) {
-	if (valid_move(position[0] - 1, position[1])) {	//don't like this check here
-		//there is a non-solid object below player
-		change_y_velocity('S', 0.06);
-	}
-	else {
-		this->y_velocity = 0;
-	}
-	this->y_velocity *= gravity_constant;
-}
-
-/*There is some weird stuff going on with x, y names - need to make sure x is not called y etc.
-come up with some conventions... for now its working*/
-bool Player::valid_move(int ypos, int xpos) {
-	Level* level = this->level_manager->get_current_level();
-	vector<vector<map_object*>> map = *(level->get_map());
-	if ((xpos > level->get_width()-1) || (xpos < 0) || (ypos > level->get_height()-1) || (ypos < 0)) {
-		return false;
-	}
-	else {
-		return (*map.at(ypos).at(xpos)).solid == true ? false : true;
-		//refresh();
-	}
-	return false;
-}
-
-bool Player::valid_move(int y_dest, int x_dest, int x_diff, int y_diff) {
-	Level* level = this->level_manager->get_current_level();
-	vector<vector<map_object*>> map = *(level->get_map());
-	for (int i = 0; i <= x_diff; i++) {
-		for (int j = 0; j <= y_diff; j++) {
-			if ((x_dest+i > level->get_width()-1) || (x_dest+i < 0) || (y_dest+j > level->get_height()-1) || (y_dest+j < 0)) {
-				return false;
-			}
-			else {
-				if ((*map.at(y_dest + j).at(x_dest + i)).solid == true) {
-					return false;
-				}
-				//return level->get_map().at(y_dest+j).at(x_dest+i).solid == true ? false : true;
-			}
-		}
-	}
-	return true;
-}
-
-/*Perhaps I should create the intended destination first in variables, then afterwards do the validity checked...?*/
-void Player::move_player_map(char direction, int steps) {
-	int valid_at = 0;
-	switch (direction) {
-	case 'N':
-		for (int i = 1; i <= steps; i++) {
-			if (!valid_move(position[0] - i, position[1])) {
-				break;
-			}
-			else {
-				valid_at = i;
-			}
-		}
-		if (valid_at) {
-			level_manager->get_current_level()->move_map_object(position[0], position[1], position[0] - valid_at, position[1]);
-			this->set_position(position[0] - valid_at, position[1]);
-		}
-		break;
-	case 'S':
-		for (int i = 1; i <= steps; i++) {
-			if (!valid_move(position[0] + i, position[1])) {
-				break;
-			}
-			else {
-				valid_at = i;
-			}
-		}
-		if (valid_at) {
-			level_manager->get_current_level()->move_map_object(position[0], position[1], position[0] + valid_at, position[1]);
-			this->set_position(position[0] + valid_at, position[1]);
-		}
-		break;
-	case 'E':
-		for (int i = 1; i <= steps; i++) {
-			if (!(valid_move(position[0], position[1]+i))) {
-				break;
-			}
-			else {
-				valid_at = i;
-			}
-		}
-		if (valid_at) {
-			level_manager->get_current_level()->move_map_object(position[0], position[1], position[0], position[1] + valid_at);
-			this->set_position(position[0], position[1] + valid_at);
-		}
-		else {
-			//Hit a solid object when trying to go EAST -> set velocity and move_progress to 0
-			this->x_velocity = 0;
-			this->x_move_progress = 0;
-		}
-		break;
-	case 'W':
-		for (int i = 1; i <= steps; i++) {
-			if (!(valid_move(position[0], position[1] - i))) {
-				break;
-			}
-			else {
-				valid_at = i;
-			}
-		}
-		if (valid_at) {
-			level_manager->get_current_level()->move_map_object(position[0], position[1], position[0], position[1] - valid_at);
-			this->set_position(position[0], position[1] - valid_at);
-		}
-		else {
-			//Hit a solid object when trying to go EAST -> set velocity and move_progress to 0
-			this->x_velocity = 0;
-			this->x_move_progress = 0;
-		}
-		break;
-	}
-}
-
-void Player::move_player() {
-	if (x_move_progress > 1) {
-		move_player_map('E', (std::abs((int)x_move_progress)));
-		this->x_move_progress -= (int)x_move_progress;
-	}
-	else if (x_move_progress < -1) {
-		move_player_map('W', (std::abs((int)x_move_progress)));
-		this->x_move_progress -= (int)x_move_progress;
-	}
-	if (y_move_progress > 1) {
-		move_player_map('N', (std::abs((int)y_move_progress)));
-		this->y_move_progress -= (int)y_move_progress;
-	}
-	else if (y_move_progress < -1) {
-		move_player_map('S', (std::abs((int)y_move_progress)));
-		this->y_move_progress -= (int)y_move_progress;
-	}
-	
-}
-
 class Screen {
 	int height, width, starty, startx;
 	WINDOW* main_window;
@@ -785,14 +558,14 @@ class Screen {
 public:
 	Screen(int height, int width);
 	WINDOW* get_window() { return main_window; }
-	void show_player(Player* player);
-	void hide_player(Player* player);
+	//void show_player(Player* player);
+	//void hide_player(Player* player);
 
 	int* get_cam_x_pos() { return &cam_x_pos; }
 	int* get_player_screen_pos() { return &player_screen_pos; }
 
 	void show_level(Level level);
-	void scroll_level(Level* level, Player* player, int* cam_x_pos, int* player_screen_pos);
+	void scroll_level(Level* level, Player2* player, int* cam_x_pos, int* player_screen_pos);
 
 	int get_height() { return height; }
 	int get_width() { return width; }
@@ -821,15 +594,15 @@ WINDOW* Screen::create_new_window(int height, int width, int starty, int startx)
 	return local_win;
 }
 
-void Screen::show_player(Player* player) {
-	mvwaddch(main_window, (*player).get_position()[0], (*player).get_position()[1], (*player).get_icon());
-	wrefresh(main_window);
-}
+//void Screen::show_player(Player* player) {
+//	mvwaddch(main_window, (*player).get_position()[0], (*player).get_position()[1], (*player).get_icon());
+//	wrefresh(main_window);
+//}
 
-void Screen::hide_player(Player* player) {
-	mvwaddch(main_window, (*player).get_position()[0], (*player).get_position()[1], ' ');
-	wrefresh(main_window);
-}
+//void Screen::hide_player(Player* player) {
+//	mvwaddch(main_window, (*player).get_position()[0], (*player).get_position()[1], ' ');
+//	wrefresh(main_window);
+//}
 
 void Screen::show_level(Level level) {
 	//map_object** map = level.get_map();
@@ -848,29 +621,29 @@ void Screen::show_level(Level level) {
 /*Approach: camera is at a good starting point but will be good to make a bit responsive
 	>e.g. more willing to move to follow player when at max velocity but less willing during
 	small movements (more mario like!)*/
-void Screen::scroll_level(Level* level, Player* player, int* cam_x_pos, int* player_screen_pos) {
+void Screen::scroll_level(Level* level, Player2* player, int* cam_x_pos, int* player_screen_pos) {
 	vector<vector<map_object*>> map = *(level->get_map());
 	int start_y = 0;
-	*player_screen_pos = player->get_position()[1] - *cam_x_pos;
+	*player_screen_pos = player->get_y_pos() - *cam_x_pos;
 
-	if (player->get_position()[1] < ((this->width / 2) - 4)) {
+	if (player->get_y_pos() < ((this->width / 2) - 4)) {
 		/*Player is at start of level*/
 		//printw("a");
 		*cam_x_pos = 0;
 	}
-	else if (player->get_position()[1] > (level->get_width() + 4 - ((this->width) - this->width / 2))) {
+	else if (player->get_y_pos() > (level->get_width() + 4 - ((this->width) - this->width / 2))) {
 		/*Player is at end of level*/
 		*cam_x_pos = (level->get_width() - this->width + 2);
 	}
 	else if (*player_screen_pos > ((this->width / 2) + 4)) {
 		//Player is a bit in the right side of screen
 		if ((*player->get_x_velocity() > 0)) {
-			*cam_x_pos = player->get_position()[1] - ((this->width / 2) + 4);
+			*cam_x_pos = player->get_y_pos() - ((this->width / 2) + 4);
 		}
 	} 
 	else if (*player_screen_pos < ((this->width / 2) - 4)) {
 		if ((*player->get_x_velocity() < 0)) {
-			*cam_x_pos = player->get_position()[1] - ((this->width / 2) - 4);
+			*cam_x_pos = player->get_y_pos() - ((this->width / 2) - 4);
 		}
 	}
 	//map_object** map = level->get_map();
@@ -880,18 +653,19 @@ void Screen::scroll_level(Level* level, Player* player, int* cam_x_pos, int* pla
 			mvwaddch(main_window, i + 1, j + 1, (*map.at(i).at(j+*cam_x_pos)).icon);
 		}
 	}
+	//printw("%d", (*map.at(21).at(5)).solid);
 	wrefresh(main_window);
 }
 
 class Player_Manager {
-	Player* player;
+	Player2* player;
 	
 public:
-	Player_Manager(Player* player);
-	Player* get_player() { return player; }
+	Player_Manager(Player2* player);
+	Player2* get_player() { return player; }
 };
 
-Player_Manager::Player_Manager(Player* player) {
+Player_Manager::Player_Manager(Player2* player) {
 	this->player = player;
 }
 
@@ -951,7 +725,7 @@ void Game_Manager::game_loop() {
 			(*player_manager->get_player()).gravity(0.9);
 			(*player_manager->get_player()).friction(0.8);
 			(*player_manager->get_player()).change_move_progress();
-			(*player_manager->get_player()).move_player();
+			(*player_manager->get_player()).move_entity();
 			lag -= frame_wait;
 		}
 
@@ -981,10 +755,13 @@ int main() {
 	int screen_width = 85;
 	//Probably should just make these managers within the game_manager
 	Level_Manager level_manager = Level_Manager(screen_height);
-	Player player1 = Player(player1_pos, 'O', &level_manager);
-	Screen screen = Screen(screen_height, screen_width);
-	Player_Manager player_manager = Player_Manager(&player1);
+	//Player player1 = Player(player1_pos, 'O', &level_manager);
+	Player2 player2 = Player2(3, 3, 'x', &level_manager);
+	
+	Player_Manager player_manager = Player_Manager(&player2);
 	Entity_Manager entity_manager = Entity_Manager(&level_manager);
+	Screen screen = Screen(screen_height, screen_width);
 	Game_Manager game_manager = Game_Manager(&screen, &player_manager, &level_manager, &entity_manager);
 	endwin();
 }
+
