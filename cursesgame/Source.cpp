@@ -46,19 +46,23 @@ struct map_object {
 
 class Level {
 	//map_object** level_map;
-	vector<vector<map_object*>> map;
-	vector<vector<map_object*>> construct_map(int height, int width, std::map<string, map_object>* map_objects);
+	vector<vector<map_object>> map;
+	vector<vector<map_object>> construct_map(int height, int width, std::map<string, map_object>* map_objects);
 	int height;
 	int width;
 	std::map<string, map_object>* level_objects;
 public:
 	Level(int height, int width, std::map<string, map_object>* level_objects);
-	Level(vector<vector<map_object*>> map, std::map<string, map_object>* level_objects);
-	vector<vector<map_object*>>* get_map() { return &map; }
+	Level(vector<vector<map_object>> map, std::map<string, map_object>* level_objects);
+	vector<vector<map_object>>* get_map() { return &map; }
+
+	//vector<map_object> get_level_objects();
+
 	int get_height() { return height; }
 	int get_width() { return width; }
+	
 	void move_map_object(int startx, int starty, int endx, int endy);
-	void add_map_object(map_object* object, int xpos, int ypos);
+	void add_map_object(map_object object, int xpos, int ypos);
 };
 
 Level::Level(int height, int width, std::map<string, map_object>* level_objects) {
@@ -68,15 +72,19 @@ Level::Level(int height, int width, std::map<string, map_object>* level_objects)
 	this->width = width;
 }
 
-Level::Level(vector<vector<map_object*>> map, std::map<string, map_object>* level_objects) {
+Level::Level(vector<vector<map_object>> map, std::map<string, map_object>* level_objects) {
 	this->map = map;
 	this->level_objects = level_objects;
 	this->height = map.size();
 	this->width = map.at(0).size();
 }
 
-vector<vector<map_object*>> Level::construct_map(int height, int width, std::map<string, map_object>* level_objects) {
-	vector<vector<map_object*>> map;
+//vector<map_object> Level::get_level_objects() {
+//	return level_objects;
+//}
+
+vector<vector<map_object>> Level::construct_map(int height, int width, std::map<string, map_object>* level_objects) {
+	vector<vector<map_object>> map;
 	for (int i = 0; i < height; i++) {
 		vector<map_object*> temp_row;
 		for (int j = 0; j < width; j++) {
@@ -90,22 +98,22 @@ vector<vector<map_object*>> Level::construct_map(int height, int width, std::map
 				temp_row.push_back(&(level_objects->find("air")->second));
 			}
 		}
-		map.push_back(temp_row);
+		//map.push_back(temp_row);
 	}
 	return map;
 }
 
-void Level::add_map_object(map_object* object, int xpos, int ypos) {
+void Level::add_map_object(map_object object, int xpos, int ypos) {
 	map.at(xpos).at(ypos) = object;
 }
 
 void Level::move_map_object(int startx, int starty, int endx, int endy) {
-	//This is the way to do it but currently if startx and starty is an entity then it causes an error.
-	//need to think of what is going on; perhaps entity doesn't exist in level_object list when it is called.. or ever?
-	//map_object* prev_obj = &(level_objects->find(map.at(startx).at(starty)->name)->second);
+	//What about when I want the player to go in front of things or go through water or something?
+	//Might be worthwhile to store an original map (without entities) to refer back to on what to replace besides just air.
+
 	map.at(endx).at(endy) = map.at(startx).at(starty);
 	//map.at(startx).at(starty) = prev_obj;	//uncomment with bug fix.
-	map.at(startx).at(starty) = &(level_objects->find("air")->second);
+	map.at(startx).at(starty) = (level_objects->find("air")->second);
 }
 
 class Level_Manager {
@@ -119,7 +127,7 @@ public:
 	map_object add_level_object(string name, char icon, bool solid);
 	map_object add_level_object(string name, char icon, bool solid, bool N_harm, bool S_harm, bool E_harm, bool W_harm);
 	std::map<string, map_object>* get_map_objects() { return &map_objects; }
-	vector<vector<map_object*>> read_level_file(string file, int screen_height);
+	vector<vector<map_object>> read_level_file(string file, int screen_height);
 };
 
 Level_Manager::Level_Manager(int screen_height) {
@@ -166,8 +174,8 @@ map_object Level_Manager::add_level_object(string name, char icon, bool solid, b
 	return temp_obj;
 }
 
-vector<vector<map_object*>> Level_Manager::read_level_file(string file, int screen_height) {
-	vector<vector<map_object*>> map;
+vector<vector<map_object>> Level_Manager::read_level_file(string file, int screen_height) {
+	vector<vector<map_object>> map;
 	std::map<string, map_object> *level_objects = (get_map_objects());
 	std::map<string, map_object>::iterator it;
 	string line;
@@ -189,7 +197,7 @@ vector<vector<map_object*>> Level_Manager::read_level_file(string file, int scre
 			}
 			else {
 				//Read map
-				vector<map_object*> temp_vector;
+				vector<map_object> temp_vector;
 				if ((line.length() > 0) && line.at(0) == '$') {
 					map_start_flag = false;
 					return map;
@@ -198,19 +206,19 @@ vector<vector<map_object*>> Level_Manager::read_level_file(string file, int scre
 					for (int i = 0; i < line.length(); i++) {
 						for (it = level_objects->begin(); it != level_objects->end(); it++) {
 							if (it->second.icon == line.at(i)) {
-								temp_vector.push_back(&it->second);
+								temp_vector.push_back(it->second);
 							}
 						}
 					}
 					if (line.length() < width) {
 						for (int i = 0; i < width - line.length(); i++) {
-							temp_vector.push_back(&(level_objects->find("air")->second));
+							temp_vector.push_back((level_objects->find("air")->second));
 						}
 					}
 				}
 				else {
 					for (int i = 0; i < width; i++) {
-						temp_vector.push_back(&(level_objects->find("air")->second));
+						temp_vector.push_back((level_objects->find("air")->second));
 					}
 				}
 				map.push_back(temp_vector);
@@ -219,9 +227,9 @@ vector<vector<map_object*>> Level_Manager::read_level_file(string file, int scre
 		//Map should be populated now - check to see if smaller than screen, if so add some "air" at top of map
 		if (map.size() < screen_height) {
 			for (int i = 0; i < (screen_height - map.size()); i++) {
-				vector<map_object*> temp_vector;
+				vector<map_object> temp_vector;
 				for (int j = 0; j < width; j++) {
-					temp_vector.push_back(&level_objects->find("air")->second);
+					temp_vector.push_back(level_objects->find("air")->second);
 				}
 				map.insert(map.begin(), temp_vector);
 				//map.push_back(temp_vector);
@@ -281,7 +289,7 @@ Entity::Entity(int x_pos, int y_pos, char icon, Level_Manager* level_manager) {
 	this->level_manager = level_manager;
 
 	map_object entity = level_manager->add_level_object("entity", icon, true);
-	level_manager->get_current_level()->add_map_object(&entity, x_pos, y_pos);
+	level_manager->get_current_level()->add_map_object(entity, x_pos, y_pos);
 
 	x_velocity = 0;
 	y_velocity = 0;
@@ -364,14 +372,14 @@ void Entity::gravity(double gravity_constant) {
 come up with some conventions... for now its working*/
 bool Entity::valid_move(int ypos, int xpos) {
 	Level* level = this->level_manager->get_current_level();
-	vector<vector<map_object*>> map = *(level->get_map());
+	vector<vector<map_object>>* map = (level->get_map());
 	if ((xpos > level->get_width() - 1) || (xpos < 0) || (ypos > level->get_height() - 1) || (ypos < 0)) {
 		return false;
 	}
 	else {
 		//printw("%d", (*map.at(21).at(5)).solid);
 
-		return (*map.at(ypos).at(xpos)).solid == true ? false : true;
+		return (map->at(ypos).at(xpos)).solid == true ? false : true;
 		//refresh();
 	}
 	return false;
@@ -379,14 +387,14 @@ bool Entity::valid_move(int ypos, int xpos) {
 
 bool Entity::valid_move(int y_dest, int x_dest, int x_diff, int y_diff) {
 	Level* level = this->level_manager->get_current_level();
-	vector<vector<map_object*>> map = *(level->get_map());
+	vector<vector<map_object>>* map = (level->get_map());
 	for (int i = 0; i <= x_diff; i++) {
 		for (int j = 0; j <= y_diff; j++) {
 			if ((x_dest + i > level->get_width() - 1) || (x_dest + i < 0) || (y_dest + j > level->get_height() - 1) || (y_dest + j < 0)) {
 				return false;
 			}
 			else {
-				if ((*map.at(y_dest + j).at(x_dest + i)).solid == true) {
+				if ((map->at(y_dest + j).at(x_dest + i)).solid == true) {
 					return false;
 				}
 				//return level->get_map().at(y_dest+j).at(x_dest+i).solid == true ? false : true;
@@ -437,8 +445,6 @@ void Entity::move_entity_map(char direction, int steps) {
 			}
 		}
 		if (valid_at) {
-
-			printw("valid at: %d %d", x_pos, y_pos + valid_at);
 			level_manager->get_current_level()->move_map_object(x_pos, y_pos, x_pos, y_pos + valid_at);
 			this->set_position(x_pos, y_pos + valid_at);
 		}
@@ -533,7 +539,6 @@ vector<Entity>* Entity_Manager::get_entity_list() {
 
 void Entity_Manager::add_entity(Entity entity) {
 	entity_list.push_back(entity);
-	
 	return;
 }
 
@@ -606,13 +611,13 @@ WINDOW* Screen::create_new_window(int height, int width, int starty, int startx)
 
 void Screen::show_level(Level level) {
 	//map_object** map = level.get_map();
-	vector<vector<map_object*>> map = *(level.get_map());
+	vector<vector<map_object>> map = *(level.get_map());
 	//vector<vector<map_object>> map = level.get_map();
 
 	for (int i = 0; i < map.size(); i++) {
 		for (int j = 0; j < this->width-2; j++) {
 			//printw("{%d=screen, %d=level}", this->height, map.size());
-			mvwaddch(main_window, i+1, j+1, (*map.at(i).at(j)).icon);
+			mvwaddch(main_window, i+1, j+1, (map.at(i).at(j)).icon);
 		}
 	}
 	wrefresh(main_window);
@@ -622,7 +627,7 @@ void Screen::show_level(Level level) {
 	>e.g. more willing to move to follow player when at max velocity but less willing during
 	small movements (more mario like!)*/
 void Screen::scroll_level(Level* level, Player2* player, int* cam_x_pos, int* player_screen_pos) {
-	vector<vector<map_object*>> map = *(level->get_map());
+	vector<vector<map_object>>* map = (level->get_map());
 	int start_y = 0;
 	*player_screen_pos = player->get_y_pos() - *cam_x_pos;
 
@@ -648,9 +653,9 @@ void Screen::scroll_level(Level* level, Player2* player, int* cam_x_pos, int* pl
 	}
 	//map_object** map = level->get_map();
 	//vector<vector<map_object>> map = level->get_map();
-	for (int i = 0; i < map.size(); i++) {
+	for (int i = 0; i < map->size(); i++) {
 		for (int j = 0; j < this->width - 2; j++) {
-			mvwaddch(main_window, i + 1, j + 1, (*map.at(i).at(j+*cam_x_pos)).icon);
+			mvwaddch(main_window, i + 1, j + 1, (map->at(i).at(j+*cam_x_pos)).icon);
 		}
 	}
 	//printw("%d", (*map.at(21).at(5)).solid);
@@ -721,7 +726,6 @@ void Game_Manager::game_loop() {
 		while (lag >= frame_wait) {
 			entity_manager->tick_all_entities();
 			//vector<Entity*>* entity_list = entity_manager->get_entity_list();
-			//(entity_list->at(0))->friction(0.8);
 			(*player_manager->get_player()).gravity(0.9);
 			(*player_manager->get_player()).friction(0.8);
 			(*player_manager->get_player()).change_move_progress();
