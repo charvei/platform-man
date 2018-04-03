@@ -46,6 +46,7 @@ struct map_object {
 
 class Level {
 	//map_object** level_map;
+	vector<vector<map_object>> original_map;
 	vector<vector<map_object>> map;
 	vector<vector<map_object>> construct_map(int height, int width, std::map<string, map_object>* map_objects);
 	int height;
@@ -63,17 +64,20 @@ public:
 	
 	void move_map_object(int startx, int starty, int endx, int endy);
 	void add_map_object(map_object object, int xpos, int ypos);
+	map_object delete_map_object(int x_pos, int y_pos);
 };
 
 Level::Level(int height, int width, std::map<string, map_object>* level_objects) {
 	this->level_objects = level_objects;
 	this->map = construct_map(height, width, level_objects);
+	this->original_map = this->map;
 	this->height = height;
 	this->width = width;
 }
 
 Level::Level(vector<vector<map_object>> map, std::map<string, map_object>* level_objects) {
 	this->map = map;
+	this->original_map = this->map;
 	this->level_objects = level_objects;
 	this->height = map.size();
 	this->width = map.at(0).size();
@@ -108,12 +112,15 @@ void Level::add_map_object(map_object object, int xpos, int ypos) {
 }
 
 void Level::move_map_object(int startx, int starty, int endx, int endy) {
-	//What about when I want the player to go in front of things or go through water or something?
-	//Might be worthwhile to store an original map (without entities) to refer back to on what to replace besides just air.
-
 	map.at(endx).at(endy) = map.at(startx).at(starty);
-	//map.at(startx).at(starty) = prev_obj;	//uncomment with bug fix.
-	map.at(startx).at(starty) = (level_objects->find("air")->second);
+	map.at(startx).at(starty) = original_map.at(startx).at(starty);
+	//map.at(startx).at(starty) = (level_objects->find("air")->second);
+}
+
+map_object Level::delete_map_object(int x_pos, int y_pos) {
+	map_object deleted_map_object = map.at(x_pos).at(y_pos);
+	map.at(x_pos).at(y_pos) = original_map.at(x_pos).at(y_pos);
+	return deleted_map_object;
 }
 
 class Level_Manager {
@@ -247,6 +254,7 @@ vector<vector<map_object>> Level_Manager::read_level_file(string file, int scree
 class Entity {
 	Level_Manager* level_manager;
 	char icon;
+	string name;
 	int x_pos;
 	int y_pos;
 	double x_velocity;
@@ -254,12 +262,13 @@ class Entity {
 	double y_velocity;
 	double y_move_progress;
 public:
-	Entity(int x_pos, int y_pos, char icon, Level_Manager* level_manager);
+	Entity(int x_pos, int y_pos, char icon, string name, Level_Manager* level_manager);
 
 	int get_x_pos() { return x_pos; }
 	int get_y_pos() { return y_pos; }
 	void set_position(int xpos, int ypos) { this->x_pos = xpos; this->y_pos = ypos; }
 	char get_icon() { return icon; }
+	string get_name() { return name; }
 
 	void move_entity();
 	void move_entity_map(char direction, int steps);
@@ -279,18 +288,17 @@ public:
 
 	double* get_x_velocity() { return &x_velocity; }
 
+	bool equals(Entity entity);
+
 	void tick_action();
 };
 
-Entity::Entity(int x_pos, int y_pos, char icon, Level_Manager* level_manager) {
+Entity::Entity(int x_pos, int y_pos, char icon, string name, Level_Manager* level_manager) {
+	this->name = name;
 	this->x_pos = x_pos;
 	this->y_pos = y_pos;
 	this->icon = icon;
 	this->level_manager = level_manager;
-
-	map_object entity = level_manager->add_level_object("entity", icon, true);
-	level_manager->get_current_level()->add_map_object(entity, x_pos, y_pos);
-
 	x_velocity = 0;
 	y_velocity = 0;
 }
@@ -501,16 +509,24 @@ void Entity::tick_action() {
 	//printw(("\n->%d <\n"), (level_manager->get_current_level()->get_map()->at(0)).at(200)->solid);
 	//printw("{prog:%f}", y_move_progress);
 	move_entity();
-
 }
 
-class Player2 : public Entity {
+bool Entity::equals(Entity entity) {
+	if ((this->get_icon() == entity.get_icon()) && (this->get_x_pos() == entity.get_x_pos()) && (this->get_y_pos() && entity.get_y_pos())) {
+		return true;
+	}
+	else {
+		return false;
+	}
+}
+
+class Player : public Entity {
 	//Entity(int x_pos, int y_pos, char icon, Level_Manager* &level_manager);
 public:
-	Player2(int x_pos, int y_pos, char icon, Level_Manager* level_manager);
+	Player(int x_pos, int y_pos, char icon, string name, Level_Manager* level_manager);
 };
 
-Player2::Player2(int x_pos, int y_pos, char icon, Level_Manager* level_manager) : Entity(x_pos, y_pos, icon, level_manager) {
+Player::Player(int x_pos, int y_pos, char icon, string name, Level_Manager* level_manager) : Entity(x_pos, y_pos, icon, name, level_manager) {
 
 }
 
@@ -522,15 +538,17 @@ public:
 	Entity_Manager(Level_Manager* level_manager);
 	vector<Entity>* get_entity_list();
 	void add_entity(Entity entity);
+	bool remove_entity(Entity entity);
 	void tick_all_entities();
 };
 
 Entity_Manager::Entity_Manager(Level_Manager* level_manager) {
 	this->level_manager = level_manager;
-	Entity test = Entity(5, 5, 'O', level_manager);
-	Entity test2 = Entity(5, 50, 'z', level_manager);
+	Entity test = Entity(5, 5, 'x', "entity1", level_manager);
+	Entity test2 = Entity(5, 50, 'z', "entity2", level_manager);
 	add_entity(test);
 	add_entity(test2);
+	printw("%d", remove_entity(test));
 }
 
 vector<Entity>* Entity_Manager::get_entity_list() {
@@ -538,8 +556,21 @@ vector<Entity>* Entity_Manager::get_entity_list() {
 }
 
 void Entity_Manager::add_entity(Entity entity) {
+	map_object map_entity = level_manager->add_level_object(entity.get_name(), entity.get_icon(), true);
+	level_manager->get_current_level()->add_map_object(map_entity, entity.get_x_pos(), entity.get_y_pos());
 	entity_list.push_back(entity);
 	return;
+}
+
+bool Entity_Manager::remove_entity(Entity entity) {
+	for (vector<Entity>::iterator it = entity_list.begin(); it != entity_list.end(); it++) {
+		if ((*it).equals(entity)) {
+			entity_list.erase(it);
+			level_manager->get_current_level()->delete_map_object(entity.get_x_pos(), entity.get_y_pos());
+			return true;
+		}
+	}
+	return false;
 }
 
 void Entity_Manager::tick_all_entities() {
@@ -570,7 +601,7 @@ public:
 	int* get_player_screen_pos() { return &player_screen_pos; }
 
 	void show_level(Level level);
-	void scroll_level(Level* level, Player2* player, int* cam_x_pos, int* player_screen_pos);
+	void scroll_level(Level* level, Player* player, int* cam_x_pos, int* player_screen_pos);
 
 	int get_height() { return height; }
 	int get_width() { return width; }
@@ -626,7 +657,7 @@ void Screen::show_level(Level level) {
 /*Approach: camera is at a good starting point but will be good to make a bit responsive
 	>e.g. more willing to move to follow player when at max velocity but less willing during
 	small movements (more mario like!)*/
-void Screen::scroll_level(Level* level, Player2* player, int* cam_x_pos, int* player_screen_pos) {
+void Screen::scroll_level(Level* level, Player* player, int* cam_x_pos, int* player_screen_pos) {
 	vector<vector<map_object>>* map = (level->get_map());
 	int start_y = 0;
 	*player_screen_pos = player->get_y_pos() - *cam_x_pos;
@@ -663,15 +694,27 @@ void Screen::scroll_level(Level* level, Player2* player, int* cam_x_pos, int* pl
 }
 
 class Player_Manager {
-	Player2* player;
+	vector<Player> player_list;
+	Level_Manager* level_manager;
+	vector<Entity>* entity_list;
 	
 public:
-	Player_Manager(Player2* player);
-	Player2* get_player() { return player; }
+	Player_Manager(Level_Manager* level_manager, vector<Entity>* entity_list);
+	Player* get_player() { return &(player_list.front()); }
+	void add_player(Player player);
 };
 
-Player_Manager::Player_Manager(Player2* player) {
-	this->player = player;
+Player_Manager::Player_Manager(Level_Manager* level_manager, vector<Entity>* entity_list) {
+	this->level_manager = level_manager;
+	this->entity_list = entity_list;
+	Player player = Player(3, 3, 'O', "player", level_manager);
+	add_player(player);
+}
+
+void Player_Manager::add_player(Player player) {
+	map_object map_player = level_manager->add_level_object(player.get_name(), player.get_icon(), true);
+	level_manager->get_current_level()->add_map_object(map_player, player.get_x_pos(), player.get_y_pos());
+	player_list.push_back(player);
 }
 
 class Game_Manager {
@@ -760,10 +803,8 @@ int main() {
 	//Probably should just make these managers within the game_manager
 	Level_Manager level_manager = Level_Manager(screen_height);
 	//Player player1 = Player(player1_pos, 'O', &level_manager);
-	Player2 player2 = Player2(3, 3, 'x', &level_manager);
-	
-	Player_Manager player_manager = Player_Manager(&player2);
 	Entity_Manager entity_manager = Entity_Manager(&level_manager);
+	Player_Manager player_manager = Player_Manager(&level_manager, entity_manager.get_entity_list());
 	Screen screen = Screen(screen_height, screen_width);
 	Game_Manager game_manager = Game_Manager(&screen, &player_manager, &level_manager, &entity_manager);
 	endwin();
