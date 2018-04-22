@@ -16,7 +16,12 @@
 
 using namespace std;
 
-/*TO DO:
+/*
+CURRENTLY DOING:
+	-Enemies
+	-Player <-> enemy interactions
+
+TO DO:
 	-Refactor physics
 	-Repeated/held down key press is 'interrupted' when another key is pressed
 		>Causes issues with running and jumping
@@ -24,7 +29,6 @@ using namespace std;
 	-kicking up dirt effect for better feedback
 	-visual overhaul
 	-lives
-	-enemies (involves extracting some elements from player and generalising)
 	-intro logo 'sierra screen'.
 	-music
 	-menus
@@ -40,7 +44,6 @@ struct map_object {
 	string name;
 	char icon;
 	bool solid;
-	//bool harmful_direction[4];	//N, S, E, W
 	vector<bool> harmful_dir;
 };
 
@@ -107,19 +110,19 @@ vector<vector<map_object>> Level::construct_map(int height, int width, std::map<
 	return map;
 }
 
-void Level::add_map_object(map_object object, int xpos, int ypos) {
-	map.at(xpos).at(ypos) = object;
+void Level::add_map_object(map_object object, int ypos, int xpos) {
+	map.at(ypos).at(xpos) = object;
 }
 
-void Level::move_map_object(int startx, int starty, int endx, int endy) {
-	map.at(endx).at(endy) = map.at(startx).at(starty);
-	map.at(startx).at(starty) = original_map.at(startx).at(starty);
+void Level::move_map_object(int starty, int startx, int endy, int endx) {
+	map.at(endy).at(endx) = map.at(starty).at(startx);
+	map.at(starty).at(startx) = original_map.at(starty).at(startx);
 	//map.at(startx).at(starty) = (level_objects->find("air")->second);
 }
 
-map_object Level::delete_map_object(int x_pos, int y_pos) {
-	map_object deleted_map_object = map.at(x_pos).at(y_pos);
-	map.at(x_pos).at(y_pos) = original_map.at(x_pos).at(y_pos);
+map_object Level::delete_map_object(int y_pos, int x_pos) {
+	map_object deleted_map_object = map.at(y_pos).at(x_pos);
+	map.at(y_pos).at(x_pos) = original_map.at(y_pos).at(x_pos);
 	return deleted_map_object;
 }
 
@@ -180,6 +183,20 @@ map_object Level_Manager::add_level_object(string name, char icon, bool solid, b
 	this->map_objects.insert(std::pair<string, map_object>(name, temp_obj));
 	return temp_obj;
 }
+
+/*might want to make header etc files*/
+/*map_object Level_Manager::add_level_object(string name, char icon, bool solid, bool N_harm, bool S_harm, bool E_harm, bool W_harm, Entity* entity) {
+	vector<bool> harms = { N_harm, S_harm, E_harm, W_harm };
+	map_object temp_obj = {
+		name,
+		icon,
+		solid,
+		harms,
+		entity
+	};
+	this->map_objects.insert(std::pair<string, map_object>(name, temp_obj));
+	return temp_obj;
+}*/
 
 vector<vector<map_object>> Level_Manager::read_level_file(string file, int screen_height) {
 	vector<vector<map_object>> map;
@@ -257,6 +274,7 @@ class Entity {
 	string name;
 	int x_pos;
 	int y_pos;
+	map_object* map_obj;
 	double x_velocity;
 	double x_move_progress;
 	double y_velocity;
@@ -269,7 +287,11 @@ public:
 	void set_position(int xpos, int ypos) { this->x_pos = xpos; this->y_pos = ypos; }
 	char get_icon() { return icon; }
 	string get_name() { return name; }
+	void set_map_obj(map_object* map_obj) { this->map_obj = map_obj; }
+	map_object* get_map_obj() { return map_obj; }
 
+	void move_entity2();
+	void move_entity_map2(int x_dest, int y_dest);
 	void move_entity();
 	void move_entity_map(char direction, int steps);
 
@@ -277,7 +299,10 @@ public:
 	void jump();
 
 	bool valid_move(int xpos, int ypos);
+	map_object collides_with(int xpos, int ypos);
 	bool valid_move(int y_dest, int x_dest, int x_diff, int y_diff);
+	//void manage_collision(Entity collidee);
+	virtual void manage_collision(map_object collided_with, int direction_collided);
 
 	void friction(double friction_constant);
 	void gravity(double gravity_constant);
@@ -299,6 +324,7 @@ Entity::Entity(int x_pos, int y_pos, char icon, string name, Level_Manager* leve
 	this->y_pos = y_pos;
 	this->icon = icon;
 	this->level_manager = level_manager;
+	this->map_obj = map_obj;
 	x_velocity = 0;
 	y_velocity = 0;
 }
@@ -385,8 +411,6 @@ bool Entity::valid_move(int ypos, int xpos) {
 		return false;
 	}
 	else {
-		//printw("%d", (*map.at(21).at(5)).solid);
-
 		return (map->at(ypos).at(xpos)).solid == true ? false : true;
 		//refresh();
 	}
@@ -412,12 +436,25 @@ bool Entity::valid_move(int y_dest, int x_dest, int x_diff, int y_diff) {
 	return true;
 }
 
+map_object Entity::collides_with(int ypos, int xpos) {
+	Level* level = this->level_manager->get_current_level();
+	vector<vector<map_object>>* map = (level->get_map());
+	if (!((xpos > level->get_width() - 1) || (xpos < 0) || (ypos > level->get_height() - 1) || (ypos < 0))) {
+		return (map->at(ypos).at(xpos));
+	}
+}
+
+void Entity::manage_collision(map_object collided_with, int direction_collided) {
+}
+
 void Entity::move_entity_map(char direction, int steps) {
 	int valid_at = 0;
 	switch (direction) {
 	case 'N':
 		for (int i = 1; i <= steps; i++) {
 			if (!valid_move(x_pos - i, y_pos)) {
+				//manage_collision(collides_with(x_pos - i, y_pos));
+				manage_collision(collides_with(x_pos - 1, y_pos), 0);
 				break;
 			}
 			else {
@@ -432,6 +469,7 @@ void Entity::move_entity_map(char direction, int steps) {
 	case 'S':
 		for (int i = 1; i <= steps; i++) {
 			if (!valid_move(x_pos + i, y_pos)) {
+				manage_collision(collides_with(x_pos - 1, y_pos), 1);
 				break;
 			}
 			else {
@@ -445,7 +483,8 @@ void Entity::move_entity_map(char direction, int steps) {
 		break;
 	case 'E':
 		for (int i = 1; i <= steps; i++) {
-			if (!(valid_move(x_pos, y_pos + i))) {
+			if (!valid_move(x_pos, y_pos + i)) {
+				manage_collision(collides_with(x_pos - 1, y_pos), 2);
 				break;
 			}
 			else {
@@ -464,7 +503,8 @@ void Entity::move_entity_map(char direction, int steps) {
 		break;
 	case 'W':
 		for (int i = 1; i <= steps; i++) {
-			if (!(valid_move(x_pos, y_pos - i))) {
+			if (!valid_move(x_pos, y_pos - i)) {
+				manage_collision(collides_with(x_pos - 1, y_pos), 3);
 				break;
 			}
 			else {
@@ -503,6 +543,85 @@ void Entity::move_entity() {
 	}
 }
 
+void Entity::move_entity2() {
+	if ((std::abs(x_move_progress) > 1) || (std::abs(y_move_progress) > 1)) {
+		int x = get_x_pos() + (int)x_move_progress;
+		int y = get_y_pos() + (int)y_move_progress;
+		move_entity_map2(y, x);
+	}
+	this->x_move_progress -= (int)x_move_progress;
+	this->y_move_progress -= (int)y_move_progress;
+}
+
+void Entity::move_entity_map2(int x_dest, int y_dest) {
+	int valid_at_x = 0;
+	int valid_at_y = 0;
+	int sign_i = 0;
+	int sign_j = 0;
+
+	while (std::abs(sign_i) <= std::abs(x_pos - x_dest)) {
+		(x_pos <= x_dest) ? sign_i++ : sign_i--;
+		if (!valid_move(x_pos + sign_i, y_pos)) {
+			break;
+		}
+		else {
+			valid_at_x = sign_i;
+		}
+	}
+	if (valid_at_x) {
+		level_manager->get_current_level()->move_map_object(x_pos, y_pos, x_pos + valid_at_x, y_pos);
+		this->set_position(x_pos + valid_at_x, y_pos);
+	}
+}
+
+/*
+void Entity::move_entity_map2(int x_dest, int y_dest) {
+	
+	int x_valid_at = 0;
+	int y_valid_at = 0;
+	int signed_i;
+	int signed_j;
+	printw("%d", abs(x_pos-x_dest));
+	for (int i = 1; i <= std::abs(x_pos - x_dest); i++) {
+		((x_pos - x_dest) < 0) ? signed_i = i * -1 : signed_i = i;
+		if (!(valid_move(x_pos + signed_i, y_pos))) {
+			break;
+		}
+		else {
+			x_valid_at = i;
+		}
+	}
+	for (int j = 1; j <= std::abs(y_pos - y_dest); j++) {
+		((y_pos - y_dest) < 0) ? signed_j = j * -1 : signed_j = j;
+		if (!(valid_move(x_pos, y_pos + signed_j))) {
+			printw("yo");
+		}
+		else {
+
+			y_valid_at = j;
+		}
+	}
+
+	if (x_valid_at) {
+		level_manager->get_current_level()->move_map_object(x_pos, y_pos, x_pos + x_valid_at, y_pos);
+		this->set_position(x_pos + x_valid_at, y_pos);
+	} 
+	else {
+		//Hit a solid object when trying to go EAST -> set velocity and move_progress to 0
+		this->x_velocity = 0;
+		this->x_move_progress = 0;
+	}
+	if (y_valid_at) {
+		level_manager->get_current_level()->move_map_object(x_pos, y_pos, x_pos, y_pos + y_valid_at);
+		this->set_position(x_pos, y_pos + y_valid_at);
+	}
+	else {
+		this->y_velocity = 0;
+		this->x_velocity = 0;
+	}
+}
+*/
+
 void Entity::tick_action() {
 	gravity(0.9);
 	change_move_progress();
@@ -524,12 +643,28 @@ class Player : public Entity {
 	//Entity(int x_pos, int y_pos, char icon, Level_Manager* &level_manager);
 public:
 	Player(int x_pos, int y_pos, char icon, string name, Level_Manager* level_manager);
+	//void manage_collision(Player player, Entity entity, int direction_collided);
+	void manage_collision(map_object collided_obj, int direction_collided);
 };
 
 Player::Player(int x_pos, int y_pos, char icon, string name, Level_Manager* level_manager) : Entity(x_pos, y_pos, icon, name, level_manager) {
 
 }
 
+void Player::manage_collision(map_object collided_obj, int direction_collided) {
+	if (collided_obj.harmful_dir.at(direction_collided)) {
+		printw("ran into harmful enemy");
+	}
+}
+
+/*
+void Player::manage_collision(Player player, Entity entity, int direction_collided) {
+
+	if (entity.get_map_obj()->harmful_dir[direction_collided]) {
+		printw("ran into a harmful enemy");
+	}
+}
+*/
 class Entity_Manager {
 	Level_Manager* level_manager;
 	vector<Entity> entity_list;
@@ -556,8 +691,9 @@ vector<Entity>* Entity_Manager::get_entity_list() {
 }
 
 void Entity_Manager::add_entity(Entity entity) {
-	map_object map_entity = level_manager->add_level_object(entity.get_name(), entity.get_icon(), true);
+	map_object map_entity = level_manager->add_level_object(entity.get_name(), entity.get_icon(), true, true, true, true, true);
 	level_manager->get_current_level()->add_map_object(map_entity, entity.get_x_pos(), entity.get_y_pos());
+	entity.set_map_obj(&map_entity);
 	entity_list.push_back(entity);
 	return;
 }
@@ -578,11 +714,7 @@ void Entity_Manager::tick_all_entities() {
 	for (Entity entity : entity_list) {
 		entity_list.at(i).tick_action();
 		i++;
-		//printw("%d", entity.get_x_pos());
-		//entity.tick_action();
 	}
-	//printw("%d", entity_list.at(0).get_x_pos());
-	//entity_list.at(0).tick_action();
 }
 
 class Screen {
@@ -629,16 +761,6 @@ WINDOW* Screen::create_new_window(int height, int width, int starty, int startx)
 	wrefresh(local_win);
 	return local_win;
 }
-
-//void Screen::show_player(Player* player) {
-//	mvwaddch(main_window, (*player).get_position()[0], (*player).get_position()[1], (*player).get_icon());
-//	wrefresh(main_window);
-//}
-
-//void Screen::hide_player(Player* player) {
-//	mvwaddch(main_window, (*player).get_position()[0], (*player).get_position()[1], ' ');
-//	wrefresh(main_window);
-//}
 
 void Screen::show_level(Level level) {
 	//map_object** map = level.get_map();
@@ -689,7 +811,6 @@ void Screen::scroll_level(Level* level, Player* player, int* cam_x_pos, int* pla
 			mvwaddch(main_window, i + 1, j + 1, (map->at(i).at(j+*cam_x_pos)).icon);
 		}
 	}
-	//printw("%d", (*map.at(21).at(5)).solid);
 	wrefresh(main_window);
 }
 
@@ -714,6 +835,7 @@ Player_Manager::Player_Manager(Level_Manager* level_manager, vector<Entity>* ent
 void Player_Manager::add_player(Player player) {
 	map_object map_player = level_manager->add_level_object(player.get_name(), player.get_icon(), true);
 	level_manager->get_current_level()->add_map_object(map_player, player.get_x_pos(), player.get_y_pos());
+	player.set_map_obj(&map_player);
 	player_list.push_back(player);
 }
 
@@ -764,7 +886,6 @@ void Game_Manager::game_loop() {
 			pressed_keys.pop();
 		}
 		
-
 		/*UPDATING GAMESTATE*/
 		while (lag >= frame_wait) {
 			entity_manager->tick_all_entities();
@@ -777,7 +898,6 @@ void Game_Manager::game_loop() {
 		}
 
 		/*RENDERING*/
-		
 		screen->scroll_level(level_manager->get_current_level(), player_manager->get_player(), screen->get_cam_x_pos(), screen->get_player_screen_pos());
 		refresh();
 	}
